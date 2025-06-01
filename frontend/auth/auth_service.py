@@ -116,7 +116,7 @@ class AuthService:
             $lastName: String!,
             $role: String
         ) {
-            register(
+            createUser(
                 email: $email, 
                 password: $password, 
                 firstName: $firstName, 
@@ -139,29 +139,39 @@ class AuthService:
             "role": role
         }
         
+        headers = {'Content-Type': 'application/json'} # Registration should not send auth token
+
+        print("--- Attempting Registration ---")
+        print(f"API URL: {API_URL}")
+        # print(f"Mutation: {register_mutation}") # Can be verbose
+        print(f"Variables: {json.dumps(variables, indent=2)}")
+        print(f"Headers: {headers}")
+
         try:
-            # Include authentication token in headers if available
-            headers = {}
-            if self._token:
-                headers["Authorization"] = f"JWT {self._token}"
-            
             result = self.client.execute(
-                query=register_mutation, 
+                query=register_mutation,
                 variables=variables,
                 headers=headers
             )
+            print(f"Registration API Response: {json.dumps(result, indent=2)}")
+
+            if result and "errors" in result:
+                graphql_error = result["errors"][0]["message"]
+                print(f"GraphQL Error during registration: {graphql_error}")
+                return False, graphql_error
             
-            if "errors" in result:
-                return False, result["errors"][0]["message"]
-            
-            user_data = result.get("data", {}).get("register", {}).get("user", {})
+            user_data = result.get("data", {}).get("createUser", {}).get("user", {})
             if user_data and "id" in user_data:
                 return True, "Registration successful"
-            
-            return False, "Registration failed"
-        
+            else:
+                # This case implies data was returned but didn't contain the expected user ID.
+                # It could be a successful call but unexpected response structure, or createUser resolved to null.
+                print("Registration call successful, but user data not found in response or 'id' missing.")
+                return False, "Registration failed: User data not found in response."
+
         except Exception as e:
-            return False, f"Registration error: {str(e)}"
+                print(f"Network/Client Exception during registration: {type(e).__name__} - {str(e)}")
+                return False, f"Registration error: An unexpected error occurred. {str(e)}"
     
     def logout(self):
         """Log the user out by removing the token"""

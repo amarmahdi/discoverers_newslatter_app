@@ -18,6 +18,12 @@ from views.event_view import EventListView
 from views.profile_view import ProfileView
 from utils.theme import get_theme
 
+# Import our animation disabling patch
+from patches.disable_animations import apply_patches
+
+# Apply the patch to disable all animations in Flet
+apply_patches()
+
 
 class DaycareNewsletterApp:
     def __init__(self, page: ft.Page):
@@ -39,6 +45,18 @@ class DaycareNewsletterApp:
         self.page.padding = 0
         self.page.on_route_change = self.route_change
         self.page.on_view_pop = self.view_pop
+        
+        # Disable ALL page transition animations
+        self.page.animation = None
+        self.page.views_transition = None
+        self.page.route_animation = None
+        self.page.theme = ft.Theme(page_transitions=ft.PageTransitionsTheme(
+            android=ft.PageTransitionEffect.NONE,
+            ios=ft.PageTransitionEffect.NONE,
+            linux=ft.PageTransitionEffect.NONE,
+            macos=ft.PageTransitionEffect.NONE,
+            windows=ft.PageTransitionEffect.NONE,
+        ))
         
         # Create app bar with title and theme toggle
         self.page.appbar = AppBar(
@@ -139,7 +157,9 @@ class DaycareNewsletterApp:
                     "/",
                     [LoginView(self)],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         elif route_path == "/register":
@@ -149,7 +169,9 @@ class DaycareNewsletterApp:
                     "/register",
                     [RegisterView(self)],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         elif route_path == "/dashboard":
@@ -178,7 +200,9 @@ class DaycareNewsletterApp:
                         )
                     ],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         elif route_path == "/newsletters":
@@ -207,7 +231,9 @@ class DaycareNewsletterApp:
                         )
                     ],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         elif route_path.startswith("/newsletter/"):
@@ -236,7 +262,9 @@ class DaycareNewsletterApp:
                         )
                     ],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         elif route_path == "/announcements":
@@ -264,7 +292,9 @@ class DaycareNewsletterApp:
                         )
                     ],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         elif route_path == "/events":
@@ -292,7 +322,9 @@ class DaycareNewsletterApp:
                         )
                     ],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         elif route_path == "/profile":
@@ -320,7 +352,9 @@ class DaycareNewsletterApp:
                         )
                     ],
                     padding=0,
-                    bgcolor=ft.Colors.WHITE
+                    bgcolor="#FFFFFF",
+                    animate=False,
+                    transition=None
                 )
             )
         self.page.update()

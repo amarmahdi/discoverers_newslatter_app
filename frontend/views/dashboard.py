@@ -5,7 +5,7 @@ from flet import (
     CrossAxisAlignment, ProgressRing, padding, 
     BoxShadow, alignment, ScrollMode,
     TextField, ElevatedButton, ButtonStyle,
-    margin, CircleAvatar, Divider, Tabs, Tab
+    margin, CircleAvatar, Divider
 )
 import asyncio
 import datetime
@@ -22,8 +22,30 @@ class DashboardView(Container):
         # Reduced left padding to accommodate the sidebar
         self.padding = padding.only(left=10, right=20, top=20, bottom=0)
         
-        # User info from auth service
+        # SAFE USER INFO HANDLING - Complete replacement
+        # Get user data or empty dict if None
         self.user = self.auth_service.get_user() or {}
+        
+        # Initialize selected tab index
+        self.selected_tab_index = 0
+        
+        # Safely get user initial for avatar
+        first_name = self.user.get("first_name", "")
+        if first_name and isinstance(first_name, str) and len(first_name.strip()) > 0:
+            self.user_initial = first_name[0].upper()
+        else:
+            # Fallback to email initial or default
+            email = self.user.get("email", "")
+            if email and isinstance(email, str) and len(email.strip()) > 0:
+                self.user_initial = email[0].upper()
+            else:
+                self.user_initial = "D"  # Default initial
+        
+        # Safely get display name
+        if first_name and isinstance(first_name, str) and len(first_name.strip()) > 0:
+            self.user_display_name = first_name
+        else:
+            self.user_display_name = self.user.get("email", "User")
         
         # Data loading indicator
         self.loading = ProgressRing(width=20, height=20, stroke_width=2)
@@ -38,7 +60,7 @@ class DashboardView(Container):
             min_lines=2,
             max_lines=4,
             filled=True,
-            bgcolor=ft.Colors.BLUE_50,
+            bgcolor="#E3F2FD",  # BLUE_50
         )
         
         # Build the initial UI with social media layout
@@ -52,15 +74,15 @@ class DashboardView(Container):
                             Column(
                                 [
                                     Text(
-                                        f"Welcome, {self.user.get('firstName', 'User')}!",
+                                        f"Welcome, {self.user_display_name}!",
                                         size=24,
-                                        weight=ft.FontWeight.BOLD,
-                                        color=ft.Colors.BLUE_900,
+                                        weight="bold",
+                                        color="#0D47A1",  # BLUE_900
                                     ),
                                     Text(
                                         "Discoverers Daycare Community",
                                         size=16,
-                                        color=ft.Colors.BLUE_GREY_700,
+                                        color="#455A64",  # BLUE_GREY_700
                                     ),
                                 ],
                             ),
@@ -68,9 +90,9 @@ class DashboardView(Container):
                             Container(
                                 content=CircleAvatar(
                                     # Use initials for avatar if no profile picture
-                                    content=Text(self.user.get("firstName", "U")[0].upper()),
-                                    color=ft.Colors.WHITE,
-                                    bgcolor=ft.Colors.BLUE_ACCENT,
+                                    content=Text(self.user_initial),
+                                    color="#FFFFFF",  # WHITE
+                                    bgcolor="#2979FF",  # BLUE_ACCENT
                                 ),
                                 margin=margin.only(left=10),
                             ),
@@ -102,43 +124,65 @@ class DashboardView(Container):
                             ),
                         ],
                     ),
-                    bgcolor=ft.Colors.WHITE,
+                    bgcolor="#FFFFFF",  # WHITE
                     border_radius=8,
                     padding=padding.all(15),
                     shadow=BoxShadow(
                         spread_radius=1,
                         blur_radius=10,
-                        color=ft.Colors.BLACK12,
+                        color="#E0E0E0",  # Similar to BLACK12
                     ),
                     margin=margin.only(bottom=20),
                 ),
                 
-                # Feed tabs - allow switching between different content types
-                Tabs(
-                    selected_index=0,
-                    animation_duration=300,
-                    tabs=[
-                        Tab(
-                            text="All Updates",
-                            icon=ft.Icons.DYNAMIC_FEED,
-                        ),
-                        Tab(
-                            text="Newsletters",
-                            icon=ft.Icons.NEWSPAPER,
-                        ),
-                        Tab(
-                            text="Announcements",
-                            icon=ft.Icons.ANNOUNCEMENT,
-                        ),
-                        Tab(
-                            text="Events",
-                            icon=ft.Icons.EVENT,
-                        ),
-                    ],
-                    on_change=self.tab_changed,
+                # TABS REPLACEMENT: Use buttons in a row instead of Tabs to avoid type errors
+                # This replaces the problematic Tabs component
+                Container(
+                    content=Row(
+                        [
+                            ElevatedButton(
+                                "All Updates",
+                                icon=ft.Icons.DYNAMIC_FEED,
+                                data=0,
+                                on_click=self.tab_button_clicked,
+                                style=ButtonStyle(
+                                    shape={"":ft.RoundedRectangleBorder(radius=8)},
+                                ),
+                            ),
+                            ElevatedButton(
+                                "Newsletters",
+                                icon=ft.Icons.NEWSPAPER,
+                                data=1,
+                                on_click=self.tab_button_clicked,
+                                style=ButtonStyle(
+                                    shape={"":ft.RoundedRectangleBorder(radius=8)},
+                                ),
+                            ),
+                            ElevatedButton(
+                                "Announcements",
+                                icon=ft.Icons.ANNOUNCEMENT,
+                                data=2,
+                                on_click=self.tab_button_clicked,
+                                style=ButtonStyle(
+                                    shape={"":ft.RoundedRectangleBorder(radius=8)},
+                                ),
+                            ),
+                            ElevatedButton(
+                                "Events",
+                                icon=ft.Icons.EVENT,
+                                data=3,
+                                on_click=self.tab_button_clicked,
+                                style=ButtonStyle(
+                                    shape={"":ft.RoundedRectangleBorder(radius=8)},
+                                ),
+                            ),
+                        ],
+                        spacing=10,
+                    ),
+                    padding=padding.only(bottom=10),
                 ),
                 
-                Divider(height=1, color=ft.Colors.BLUE_GREY_100),
+                Divider(height=1, color="#ECEFF1"),  # BLUE_GREY_100
                 
                 # Main feed area
                 Container(
@@ -246,9 +290,9 @@ class DashboardView(Container):
             if news_error:
                 self.feed_items.controls.append(
                     Container(
-                        content=Text(f"Error loading newsletters: {news_error}", color=ft.Colors.RED),
+                        content=Text(f"Error loading newsletters: {news_error}", color="#F44336"),  
                         padding=padding.all(10),
-                        bgcolor=ft.Colors.RED_50,
+                        bgcolor="#FFEBEE",  
                         border_radius=8,
                         margin=margin.only(bottom=10),
                     )
@@ -257,9 +301,9 @@ class DashboardView(Container):
             if announcement_error:
                 self.feed_items.controls.append(
                     Container(
-                        content=Text(f"Error loading announcements: {announcement_error}", color=ft.Colors.RED),
+                        content=Text(f"Error loading announcements: {announcement_error}", color="#F44336"),  
                         padding=padding.all(10),
-                        bgcolor=ft.Colors.RED_50,
+                        bgcolor="#FFEBEE",  
                         border_radius=8,
                         margin=margin.only(bottom=10),
                     )
@@ -268,9 +312,9 @@ class DashboardView(Container):
             if events_error:
                 self.feed_items.controls.append(
                     Container(
-                        content=Text(f"Error loading events: {events_error}", color=ft.Colors.RED),
+                        content=Text(f"Error loading events: {events_error}", color="#F44336"),  
                         padding=padding.all(10),
-                        bgcolor=ft.Colors.RED_50,
+                        bgcolor="#FFEBEE",  
                         border_radius=8,
                         margin=margin.only(bottom=10),
                     )
@@ -289,12 +333,12 @@ class DashboardView(Container):
                                 Icon(
                                     name=ft.Icons.INFO_OUTLINE,
                                     size=40,
-                                    color=ft.Colors.BLUE_GREY_300,
+                                    color="#90A4AE",  
                                 ),
                                 Text(
                                     "No updates available",
                                     size=16,
-                                    color=ft.Colors.BLUE_GREY_500,
+                                    color="#455A64",  
                                     text_align=ft.TextAlign.CENTER,
                                 ),
                             ],
@@ -315,111 +359,123 @@ class DashboardView(Container):
             if self.page is not None:
                 self.page.snack_bar = ft.SnackBar(
                     content=ft.Text(f"Error updating feed: {str(e)}"),
-                    bgcolor=ft.Colors.RED_400,
+                    bgcolor="#F44336",  
                 )
                 self.page.snack_bar.open = True
                 await self.page.update_async()
-    
-    def tab_changed(self, e):
-        """Handle tab changes to filter the feed"""
-        tab_index = e.control.selected_index
         
-        # Display loading indicator
-        self.feed_items.controls = [self.loading]
-        if self.page is not None:
-            self.page.update()
+    # Handle button clicks for tab navigation and page changes
+    def tab_button_clicked(self, e):
+        # Set selected tab index based on button data
+        self.selected_tab_index = e.control.data
         
-        async def filter_feed():
+        # Navigate to appropriate page based on the selected tab
+        if self.selected_tab_index == 0:  # All Updates - stay on dashboard
+            # Just filter the feed for the dashboard with proper event loop handling
             try:
-                # Show loading indicator
-                self.feed_items.controls = [self.loading]
-                if self.page is not None:
-                    await self.page.update_async()
-                
-                # Get all data types
-                newsletters, news_error = await self.api_client.get_newsletters()
-                announcements, announcement_error = await self.api_client.get_announcements()
-                events, events_error = await self.api_client.get_upcoming_events()
-                
-                # Filter based on tab
-                feed_items = []
-                
-                if tab_index == 0:  # All Updates
-                    # Add all content types
-                    if newsletters:
-                        for item in newsletters:
-                            item['type'] = 'newsletter'
-                            item['timestamp'] = item.get('publishedAt', '')
-                            # Add preview for better readability
-                            content = item.get('content', '')
-                            if content and len(content) > 150:
-                                item['preview'] = content[:150] + '...'
-                            else:
-                                item['preview'] = content
-                            feed_items.append(item)
-                            
-                    if announcements:
-                        for item in announcements:
-                            item['type'] = 'announcement'
-                            item['timestamp'] = item.get('createdAt', '')
-                            feed_items.append(item)
-                            
-                    if events:
-                        for item in events:
-                            item['type'] = 'event'
-                            item['timestamp'] = item.get('startDate', '')
-                            feed_items.append(item)
-                            
-                elif tab_index == 1:  # Newsletters
-                    if newsletters:
-                        for item in newsletters:
-                            item['type'] = 'newsletter'
-                            item['timestamp'] = item.get('publishedAt', '')
-                            content = item.get('content', '')
-                            if content and len(content) > 150:
-                                item['preview'] = content[:150] + '...'
-                            else:
-                                item['preview'] = content
-                            feed_items.append(item)
-                            
-                elif tab_index == 2:  # Announcements
-                    if announcements:
-                        for item in announcements:
-                            item['type'] = 'announcement'
-                            item['timestamp'] = item.get('createdAt', '')
-                            feed_items.append(item)
-                            
-                elif tab_index == 3:  # Events
-                    if events:
-                        for item in events:
-                            item['type'] = 'event'
-                            item['timestamp'] = item.get('startDate', '')
-                            feed_items.append(item)
-                
-                # Sort by timestamp
-                feed_items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-                
-                # Update the feed with the filtered items
-                await self.update_feed(feed_items, news_error, announcement_error, events_error)
-                
+                # Get the current event loop or create a new one
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                # Run the filter_feed coroutine    
+                loop.create_task(self.filter_feed())
             except Exception as e:
-                print(f"Error filtering content: {e}")
-                if self.page is not None:
-                    self.page.snack_bar = ft.SnackBar(
-                        content=ft.Text(f"Error filtering content: {str(e)}"),
-                        bgcolor=ft.Colors.RED_400,
-                    )
-                    self.page.snack_bar.open = True
-                    await self.page.update_async()
-        
-        # Run the filtering coroutine with proper event loop handling
+                print(f"Error filtering feed: {str(e)}")
+        elif self.selected_tab_index == 1:  # Newsletters
+            # Navigate to newsletters page
+            self.view_all_newsletters()
+        elif self.selected_tab_index == 2:  # Announcements
+            # Navigate to announcements page
+            self.view_all_announcements()
+        elif self.selected_tab_index == 3:  # Events
+            # Navigate to events page
+            self.view_all_events()
+    
+    # Separate method for filtering feed based on selected tab
+    async def filter_feed(self):
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Show loading indicator
+            self.feed_items.controls = [self.loading]
+            if self.page is not None:
+                await self.page.update_async()
             
-        loop.create_task(filter_feed())
+            # Get all data types
+            newsletters, news_error = await self.api_client.get_newsletters()
+            announcements, announcement_error = await self.api_client.get_announcements()
+            events, events_error = await self.api_client.get_upcoming_events()
+            
+            # Filter based on tab
+            feed_items = []
+            
+            if self.selected_tab_index == 0:  # All Updates
+                # Add all content types
+                if newsletters:
+                    for item in newsletters:
+                        item['type'] = 'newsletter'
+                        item['timestamp'] = item.get('publishedAt', '')
+                        # Add preview for better readability
+                        content = item.get('content', '')
+                        if content and len(content) > 150:
+                            item['preview'] = content[:150] + '...'
+                        else:
+                            item['preview'] = content
+                        feed_items.append(item)
+                        
+                if announcements:
+                    for item in announcements:
+                        item['type'] = 'announcement'
+                        item['timestamp'] = item.get('createdAt', '')
+                        feed_items.append(item)
+                        
+                if events:
+                    for item in events:
+                        item['type'] = 'event'
+                        item['timestamp'] = item.get('startDate', '')
+                        feed_items.append(item)
+                        
+            elif self.selected_tab_index == 1:  # Newsletters
+                if newsletters:
+                    for item in newsletters:
+                        item['type'] = 'newsletter'
+                        item['timestamp'] = item.get('publishedAt', '')
+                        content = item.get('content', '')
+                        if content and len(content) > 150:
+                            item['preview'] = content[:150] + '...'
+                        else:
+                            item['preview'] = content
+                        feed_items.append(item)
+                        
+            elif self.selected_tab_index == 2:  # Announcements
+                if announcements:
+                    for item in announcements:
+                        item['type'] = 'announcement'
+                        item['timestamp'] = item.get('createdAt', '')
+                        feed_items.append(item)
+                        
+            elif self.selected_tab_index == 3:  # Events
+                if events:
+                    for item in events:
+                        item['type'] = 'event'
+                        item['timestamp'] = item.get('startDate', '')
+                        feed_items.append(item)
+            
+            # Sort by timestamp
+            feed_items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            
+            # Update the feed with the filtered items
+            await self.update_feed(feed_items, news_error, announcement_error, events_error)
+            
+        except Exception as e:
+            print(f"Error filtering content: {e}")
+            if self.page is not None:
+                self.page.snack_bar = ft.SnackBar(
+                    content=ft.Text(f"Error filtering content: {str(e)}"),
+                    bgcolor="#F44336",  
+                )
+                self.page.snack_bar.open = True
+                await self.page.update_async()
         
     async def post_update(self, e):
         """Handle posting a status update as an announcement"""
@@ -435,7 +491,7 @@ class DashboardView(Container):
         try:
             # Create the announcement with default priority (MEDIUM) and no expiry
             announcement, error = await self.api_client.create_announcement(
-                title="Update from " + self.user.get('firstName', 'User'),
+                title="Update from " + self.user_display_name,
                 content=self.status_field.value,
                 priority="MEDIUM",
                 expiry_date=None
@@ -445,7 +501,7 @@ class DashboardView(Container):
                 if self.page is not None:
                     self.page.snack_bar = ft.SnackBar(
                         content=ft.Text(f"Error creating announcement: {error}"),
-                        bgcolor=ft.Colors.RED_400,
+                        bgcolor="#F44336",  
                     )
                     self.page.snack_bar.open = True
                     await self.page.update_async()
@@ -457,7 +513,7 @@ class DashboardView(Container):
                 if self.page is not None:
                     self.page.snack_bar = ft.SnackBar(
                         content=ft.Text("Announcement posted successfully!"),
-                        bgcolor=ft.Colors.GREEN_400,
+                        bgcolor="#4CAF50",  
                     )
                     self.page.snack_bar.open = True
                     await self.page.update_async()
@@ -511,7 +567,7 @@ class DashboardView(Container):
                     if self.page is not None:
                         self.page.snack_bar = ft.SnackBar(
                             content=ft.Text(f"Posted successfully but couldn't refresh feed: {str(load_error)}"),
-                            bgcolor=ft.Colors.ORANGE_400,
+                            bgcolor="#FF9800",  
                         )
                         self.page.snack_bar.open = True
                         await self.page.update_async()
@@ -521,7 +577,7 @@ class DashboardView(Container):
             if self.page is not None:
                 self.page.snack_bar = ft.SnackBar(
                     content=ft.Text(f"An error occurred: {str(e)}"),
-                    bgcolor=ft.Colors.RED_400,
+                    bgcolor="#F44336",  
                 )
                 self.page.snack_bar.open = True
                 await self.page.update_async()
@@ -561,7 +617,7 @@ class DashboardView(Container):
         if item_type == 'newsletter':
             icon = ft.Icons.NEWSPAPER
             badge_text = "Newsletter"
-            badge_color = ft.Colors.BLUE_700
+            badge_color = "#1976D2"  # BLUE_700
             def newsletter_click_handler(e):
                 self.view_newsletter_detail(item.get('id'))
             on_click_handler = newsletter_click_handler
@@ -569,10 +625,10 @@ class DashboardView(Container):
         elif item_type == 'announcement':
             icon = ft.Icons.ANNOUNCEMENT
             badge_text = "Announcement"
-            badge_color = ft.Colors.ORANGE_700
+            badge_color = "#F57C00"  # ORANGE_700
             priority = item.get('priority', 'MEDIUM')
             if priority == 'URGENT':
-                badge_color = ft.Colors.RED_700
+                badge_color = "#D32F2F"  # RED_700
             def announcement_click_handler(e):
                 self.view_all_announcements()
             on_click_handler = announcement_click_handler
@@ -580,7 +636,7 @@ class DashboardView(Container):
         elif item_type == 'event':
             icon = ft.Icons.EVENT
             badge_text = "Event"
-            badge_color = ft.Colors.GREEN_700
+            badge_color = "#388E3C"  # GREEN_700
             def event_click_handler(e):
                 self.view_all_events()
             on_click_handler = event_click_handler
@@ -589,7 +645,7 @@ class DashboardView(Container):
             icon = ft.Icons.ARTICLE
             # No specific color needed for default case
             badge_text = "Update"
-            badge_color = ft.Colors.BLUE_GREY_700
+            badge_color = "#455A64"  # BLUE_GREY_700
             def default_click_handler(e):
                 pass
             on_click_handler = default_click_handler
@@ -608,8 +664,8 @@ class DashboardView(Container):
                                         [
                                             CircleAvatar(
                                                 content=Text(author_name[0].upper()),
-                                                bgcolor=ft.Colors.BLUE_GREY_300,
-                                                color=ft.Colors.WHITE,
+                                                bgcolor="#90A4AE",  # BLUE_GREY_300
+                                                color="#FFFFFF",  # WHITE
                                                 radius=16,
                                             ),
                                             Column(
@@ -617,12 +673,12 @@ class DashboardView(Container):
                                                     Text(
                                                         author_name,
                                                         size=14,
-                                                        weight=ft.FontWeight.BOLD,
+                                                        weight="bold",
                                                     ),
                                                     Text(
                                                         date_text,
                                                         size=12,
-                                                        color=ft.Colors.BLUE_GREY_500,
+                                                        color="#607D8B",  # BLUE_GREY_500
                                                     ),
                                                 ],
                                                 spacing=0,
@@ -637,14 +693,14 @@ class DashboardView(Container):
                                             [
                                                 Icon(
                                                     name=icon,
-                                                    color=ft.Colors.WHITE,
+                                                    color="#FFFFFF",  # WHITE
                                                     size=12,
                                                 ),
                                                 Text(
                                                     badge_text,
-                                                    color=ft.Colors.WHITE,
+                                                    color="#FFFFFF",  # WHITE
                                                     size=12,
-                                                    weight=ft.FontWeight.W_500,
+                                                    weight="w500",
                                                 ),
                                             ],
                                             spacing=4,
@@ -664,14 +720,14 @@ class DashboardView(Container):
                                         Text(
                                             title,
                                             size=18,
-                                            weight=ft.FontWeight.W_500,
-                                            color=ft.Colors.BLUE_900,
+                                            weight="w500",
+                                            color="#0D47A1",  # BLUE_900
                                         ),
                                         Container(height=5),
                                         Text(
                                             (content or '')[:150] + ("..." if (content and len(content) > 150) else ""),
                                             size=14,
-                                            color=ft.Colors.BLUE_GREY_800,
+                                            color="#37474F",  # BLUE_GREY_800
                                         ) if content else Container(),
                                     ],
                                 ),
@@ -686,7 +742,7 @@ class DashboardView(Container):
                                             IconButton(
                                                 icon=ft.Icons.THUMB_UP_OUTLINED,
                                                 tooltip="Like",
-                                                icon_color=ft.Colors.BLUE_GREY_500,
+                                                icon_color="#607D8B",  # BLUE_GREY_500
                                             ),
                                             Text("0", size=14, color=ft.Colors.BLUE_GREY_500),
                                         ],
@@ -696,7 +752,7 @@ class DashboardView(Container):
                                             IconButton(
                                                 icon=ft.Icons.COMMENT_OUTLINED,
                                                 tooltip="Comment",
-                                                icon_color=ft.Colors.BLUE_GREY_500,
+                                                icon_color="#607D8B",  # BLUE_GREY_500
                                             ),
                                             Text("0", size=14, color=ft.Colors.BLUE_GREY_500),
                                         ],
@@ -704,7 +760,7 @@ class DashboardView(Container):
                                     IconButton(
                                         icon=ft.Icons.READ_MORE,
                                         tooltip="View details",
-                                        icon_color=ft.Colors.BLUE_700,
+                                        icon_color="#1976D2",  # BLUE_700
                                         on_click=on_click_handler,
                                     ),
                                 ],
@@ -748,7 +804,7 @@ class DashboardView(Container):
                                 Text(
                                     date_text,
                                     size=12,
-                                    color=ft.Colors.BLUE_GREY_500,
+                                    color="#607D8B",  # BLUE_GREY_500
                                 ),
                             ],
                             alignment=MainAxisAlignment.SPACE_BETWEEN,
@@ -757,14 +813,14 @@ class DashboardView(Container):
                         Text(
                             title,
                             size=16,
-                            weight=ft.FontWeight.W_400,
-                            color=ft.Colors.BLUE_900,
+                            weight="w400",
+                            color="#0D47A1",  # BLUE_900
                         ),
                         Container(height=2),
                         Text(
                             subtitle or "Click to read more...",
                             size=14,
-                            color=ft.Colors.BLUE_GREY_700,
+                            color="#455A64",  # BLUE_GREY_700
                             max_lines=2,
                             overflow=ft.TextOverflow.ELLIPSIS,
                         ),
@@ -786,12 +842,12 @@ class DashboardView(Container):
         
         # Determine color based on priority
         priority_colors = {
-            "LOW": ft.Colors.GREEN,
-            "MEDIUM": ft.Colors.BLUE,
-            "HIGH": ft.Colors.ORANGE,
-            "URGENT": ft.Colors.RED,
+            "LOW": "#4CAF50",  # GREEN
+            "MEDIUM": "#2196F3",  # BLUE
+            "HIGH": "#FF9800",  # ORANGE
+            "URGENT": "#F44336",  # RED,
         }
-        priority_color = priority_colors.get(priority, ft.Colors.BLUE)
+        priority_color = priority_colors.get(priority, "#2196F3")  # Default to BLUE
         
         # Format date if available
         date_text = ""
@@ -813,7 +869,7 @@ class DashboardView(Container):
                                     content=Text(
                                         priority,
                                         size=12,
-                                        color=ft.Colors.WHITE,
+                                        color="#FFFFFF",  # WHITE
                                     ),
                                     padding=ft.padding.symmetric(horizontal=8, vertical=4),
                                     border_radius=ft.border_radius.all(4),
@@ -822,7 +878,7 @@ class DashboardView(Container):
                                 Text(
                                     date_text,
                                     size=12,
-                                    color=ft.Colors.BLUE_GREY_500,
+                                    color="#607D8B",  # BLUE_GREY_500
                                 ),
                             ],
                             alignment=MainAxisAlignment.SPACE_BETWEEN,
@@ -831,14 +887,14 @@ class DashboardView(Container):
                         Text(
                             title,
                             size=16,
-                            weight=ft.FontWeight.W_400,
-                            color=ft.Colors.BLUE_900,
+                            weight="w400",
+                            color="#0D47A1",  # BLUE_900
                         ),
                         Container(height=2),
                         Text(
                             content,
                             size=14,
-                            color=ft.Colors.BLUE_GREY_700,
+                            color="#455A64",  # BLUE_GREY_700
                             max_lines=2,
                             overflow=ft.TextOverflow.ELLIPSIS,
                         ),
@@ -897,13 +953,13 @@ class DashboardView(Container):
                                         Text(
                                             date_text,
                                             size=12,
-                                            color=ft.Colors.BLUE_GREY_700,
-                                            weight=ft.FontWeight.W_400,
+                                            color="#455A64",  # BLUE_GREY_700
+                                            weight="w400",
                                         ),
                                         Text(
                                             time_text,
                                             size=12,
-                                            color=ft.Colors.BLUE_GREY_500,
+                                            color="#607D8B",  # BLUE_GREY_500
                                         ),
                                     ],
                                     spacing=0,
@@ -916,21 +972,21 @@ class DashboardView(Container):
                         Text(
                             title,
                             size=16,
-                            weight=ft.FontWeight.W_400,
-                            color=ft.Colors.BLUE_900,
+                            weight="w400",
+                            color="#0D47A1",  # BLUE_900
                         ),
                         Container(height=2),
                         Row(
                             [
                                 Icon(
                                     name=ft.Icons.LOCATION_ON,
-                                    color=ft.Colors.BLUE_GREY_500,
+                                    color="#607D8B",  # BLUE_GREY_500
                                     size=16,
                                 ),
                                 Text(
                                     location,
                                     size=14,
-                                    color=ft.Colors.BLUE_GREY_700,
+                                    color="#455A64",  # BLUE_GREY_700
                                 ),
                             ],
                             spacing=5,
@@ -939,7 +995,7 @@ class DashboardView(Container):
                         Text(
                             description,
                             size=14,
-                            color=ft.Colors.BLUE_GREY_700,
+                            color="#455A64",  # BLUE_GREY_700
                             max_lines=2,
                             overflow=ft.TextOverflow.ELLIPSIS,
                         ),

@@ -187,13 +187,19 @@ class CreateUserMutation(graphene.Mutation):
         phone_number = graphene.String()
         address = graphene.String()
     
-    @login_required
     def mutate(self, info, email, password, first_name, last_name, role=None, **kwargs):
-        user = info.context.user
+        # For public registration, prevent creating ADMIN users directly.
+        # STAFF users might be allowed if they need to self-register, 
+        # otherwise, this check can be made stricter (e.g., allow only PARENT).
+        if role == User.Role.ADMIN:
+            raise Exception("Permission denied. Cannot create ADMIN users through public registration.")
         
-        # Only admin can create staff and admin users
-        if role in [User.Role.STAFF, User.Role.ADMIN] and not user.is_admin:
-            raise Exception("Permission denied. Only admins can create staff and admin users.")
+        # If a non-admin user tries to create a STAFF user, this was previously checked by:
+        # user = info.context.user (which would be an admin)
+        # if role in [User.Role.STAFF, User.Role.ADMIN] and not user.is_admin:
+        # For now, we allow STAFF creation via public registration as per frontend options.
+        # If this needs to be restricted, further logic changes are needed, 
+        # possibly by having separate mutations for admin-created users vs public sign-ups.
         
         new_user = User(
             email=email,

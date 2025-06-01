@@ -3,8 +3,8 @@ from flet import (
     Column, Container, Card, Row, Text, 
     IconButton, Icon, MainAxisAlignment, 
     CrossAxisAlignment, ProgressRing, 
-    ButtonStyle, RoundedRectangleBorder, padding,
-    Tabs, Tab, Divider, Image, ElevatedButton
+    ButtonStyle, padding,
+    Divider, Image, ElevatedButton
 )
 import asyncio
 from api.graphql_client import ApiClient
@@ -19,169 +19,155 @@ class NewsletterListView(Container):
         self.expand = True
         self.padding = padding.only(left=20, right=20, top=20, bottom=80)
         
-        # Tabs for filtering newsletters
-        self.tabs = Tabs(
-            selected_index=0,
-            animation_duration=300,
-            tabs=[
-                Tab(
+        # Selected tab index for filtering newsletters
+        self.selected_tab_index = 0
+        
+        # Button style for tab buttons
+        button_style = ButtonStyle(
+            color={"selected": "#FFFFFF", "":""},
+            bgcolor={"selected": "#2196F3", "":""},
+            padding=10,
+        )
+        
+        # Create filter buttons instead of tabs
+        self.filter_buttons = Row(
+            controls=[
+                ElevatedButton(
                     text="All",
-                    icon=ft.Icons.ALL_INBOX,
+                    icon="all_inbox",
+                    style=button_style,
+                    data=0,  # Use data to track tab index
+                    on_click=self.tab_button_clicked,
+                    bgcolor="#2196F3" if self.selected_tab_index == 0 else "#BBDEFB",
+                    color="#FFFFFF" if self.selected_tab_index == 0 else "#0D47A1",
                 ),
-                Tab(
-                    text="Featured",
-                    icon=ft.Icons.STAR_OUTLINE,
+                ElevatedButton(
+                    text="Recent",
+                    icon="new_releases",
+                    style=button_style,
+                    data=1,
+                    on_click=self.tab_button_clicked,
+                    bgcolor="#2196F3" if self.selected_tab_index == 1 else "#BBDEFB",
+                    color="#FFFFFF" if self.selected_tab_index == 1 else "#0D47A1",
+                ),
+                ElevatedButton(
+                    text="Archived",
+                    icon="archive",
+                    style=button_style,
+                    data=2,
+                    on_click=self.tab_button_clicked,
+                    bgcolor="#2196F3" if self.selected_tab_index == 2 else "#BBDEFB",
+                    color="#FFFFFF" if self.selected_tab_index == 2 else "#0D47A1",
                 ),
             ],
-            on_change=self.tab_changed
+            spacing=10,
         )
         
         # Data loading indicator
-        self.loading = ProgressRing(width=24, height=24, stroke_width=2)
+        self.loading = ProgressRing(width=16, height=16, stroke_width=2)
         
         # Newsletter list container
-        self.newsletters_column = Column(spacing=10)
+        self.newsletters_column = Column(
+            spacing=15,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+        )
         
-        # Initial loading message
-        self.newsletters_column.controls.append(
-            Container(
-                content=Row(
-                    [
-                        self.loading,
-                        Text("Loading newsletters...", size=14),
-                    ],
-                    alignment=MainAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                alignment=ft.alignment.center,
-                margin=ft.margin.only(top=20),
-            )
+        # Placeholder for when no newsletters are available
+        self.empty_state = Container(
+            content=Column(
+                [
+                    Icon(
+                        name="inbox_outlined",
+                        size=64,
+                        color="#B0BEC5",  # BLUE_GREY_200
+                    ),
+                    Text(
+                        "No newsletters available",
+                        color="#78909C",  # BLUE_GREY_400
+                        size=16,
+                        weight="w500",
+                    ),
+                ],
+                horizontal_alignment=CrossAxisAlignment.CENTER,
+                spacing=10,
+            ),
+            alignment=ft.alignment.center,
+            expand=True,
         )
         
         # Build the UI
         self.content = Column(
             [
-                # Page header
+                # Header with search and filters
                 Row(
                     [
                         Text(
                             "Newsletters",
                             size=24,
-                            weight=ft.FontWeight.BOLD,
-                            color=ft.Colors.BLUE_900,
+                            weight="bold",
+                        ),
+                        IconButton(
+                            icon="search",
+                            icon_color="#78909C",  # BLUE_GREY_400
                         ),
                     ],
                     alignment=MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 
-                # Filter tabs
-                self.tabs,
+                # Filter buttons
+                self.filter_buttons,
                 
                 # Newsletter list
                 self.newsletters_column,
             ],
-            spacing=10,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=20,
+            expand=True,
         )
         
-        # Load newsletters on initialization
-        self.did_mount_async()
-    
-    def did_mount_async(self):
-        """Load data asynchronously when the view is mounted"""
-        # Create an event loop if one doesn't exist
+        # Load newsletters when view is created
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        
-        # Run the coroutine in the event loop
-        loop.create_task(self.load_newsletters())
+        loop.create_task(self.load_newsletters(filter_featured=False))
     
-    async def load_newsletters(self, filter_featured=False):
-        """Load newsletters from the API"""
-        # Clear previous newsletters
-        self.newsletters_column.controls = [
-            Container(
-                content=Row(
-                    [
-                        self.loading,
-                        Text("Loading newsletters...", size=14),
-                    ],
-                    alignment=MainAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                alignment=ft.alignment.center,
-                margin=ft.margin.only(top=20),
-            )
-        ]
-        self.update()
+    def tab_button_clicked(self, e):
+        # Set selected tab index based on button data
+        self.selected_tab_index = e.control.data
         
-        # Fetch newsletters
-        newsletters, error = await self.api_client.get_newsletters()
-        
-        # Clear loading indicator
-        self.newsletters_column.controls.clear()
-        
-        if newsletters:
-            # Filter featured newsletters if requested
-            if filter_featured:
-                newsletters = [n for n in newsletters if n.get("featured", False)]
-            
-            if newsletters:
-                # Create a card for each newsletter
-                for newsletter in newsletters:
-                    self.newsletters_column.controls.append(
-                        self.create_newsletter_card(newsletter)
-                    )
+        # Update button colors based on selection
+        for button in self.filter_buttons.controls:
+            if button.data == self.selected_tab_index:
+                button.bgcolor = "#2196F3"
+                button.color = "#FFFFFF"
             else:
-                self.newsletters_column.controls.append(
-                    Container(
-                        content=Text(
-                            "No newsletters found",
-                            size=16,
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        alignment=ft.alignment.center,
-                        margin=ft.margin.only(top=40),
-                    )
-                )
-        else:
-            self.newsletters_column.controls.append(
-                Container(
-                    content=Text(
-                        error or "Unable to load newsletters",
-                        size=16,
-                        text_align=ft.TextAlign.CENTER,
-                        color=ft.Colors.RED_400,
-                    ),
-                    alignment=ft.alignment.center,
-                    margin=ft.margin.only(top=40),
-                )
-            )
+                button.bgcolor = "#BBDEFB"
+                button.color = "#0D47A1"
         
-        self.update()
-    
-    def tab_changed(self, e):
-        """Handle tab selection change"""
-        selected_index = e.control.selected_index
-        if selected_index == 0:  # All newsletters
-            # Create event loop if needed
+        # Update the UI
+        if self.page:
+            self.page.update()
+        
+        # Load newsletters based on selected tab
+        try:
+            # Get the current event loop or create a new one
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-            loop.create_task(self.load_newsletters(filter_featured=False))
-        elif selected_index == 1:  # Featured newsletters
-            # Create event loop if needed
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            loop.create_task(self.load_newsletters(filter_featured=True))
+                
+            # Filter logic based on tab index
+            if self.selected_tab_index == 0:  # All newsletters
+                loop.create_task(self.load_newsletters(filter_featured=False))
+            elif self.selected_tab_index == 1:  # Recent newsletters
+                loop.create_task(self.load_newsletters(filter_featured=False, filter_recent=True))
+            elif self.selected_tab_index == 2:  # Archived newsletters
+                loop.create_task(self.load_newsletters(filter_featured=False, filter_archived=True))
+        except Exception as e:
+            print(f"Error loading newsletters: {str(e)}")
     
     def create_newsletter_card(self, newsletter):
         """Create a card for a newsletter"""
@@ -204,7 +190,7 @@ class NewsletterListView(Container):
                 date_text = published_at
         
         # Author information
-        author_name = f"{created_by.get('firstName', '')} {created_by.get('lastName', '')}".strip()
+        author_name = f"{created_by.get('first_name', '')} {created_by.get('last_name', '')}".strip()
         if not author_name:
             author_name = created_by.get('email', 'Unknown')
         
@@ -215,9 +201,9 @@ class NewsletterListView(Container):
                     content=Text(
                         category.get("name", ""),
                         size=12,
-                        color=ft.Colors.WHITE,
+                        color="#FFFFFF",  # WHITE
                     ),
-                    bgcolor=ft.Colors.BLUE_400,
+                    bgcolor="#42A5F5",  # BLUE_400
                     border_radius=ft.border_radius.all(4),
                     padding=ft.padding.symmetric(horizontal=8, vertical=4),
                     margin=ft.margin.only(right=5),
@@ -232,109 +218,162 @@ class NewsletterListView(Container):
             content=Container(
                 content=Column(
                     [
-                        # Cover image if available
-                        Image(
-                            src=cover_image,
-                            fit=ft.ImageFit.COVER,
-                            width=400,
-                            height=150,
-                            border_radius=ft.border_radius.only(
-                                top_left=8,
-                                top_right=8,
-                            ),
-                        ) if cover_image else Container(height=0),
-                        
+                        # Newsletter header with image if available
                         Container(
-                            content=Column(
+                            content=Row(
                                 [
-                                    # Header with date and featured status
-                                    Row(
+                                    # Title and date
+                                    Column(
                                         [
+                                            Text(
+                                                title,
+                                                size=18,
+                                                weight="bold",
+                                            ),
                                             Text(
                                                 date_text,
                                                 size=12,
-                                                color=ft.Colors.BLUE_GREY_500,
-                                            ),
-                                            Icon(
-                                                name=ft.Icons.STAR,
-                                                color=ft.Colors.AMBER_400,
-                                                size=20,
-                                                visible=newsletter.get("featured", False),
+                                                color="#78909C",  # BLUE_GREY_400
                                             ),
                                         ],
-                                        alignment=MainAxisAlignment.SPACE_BETWEEN,
+                                        spacing=5,
+                                        expand=True,
                                     ),
-                                    
-                                    # Title and subtitle
-                                    Container(height=5),
-                                    Text(
-                                        title,
-                                        size=18,
-                                        weight=ft.FontWeight.W500,
-                                        color=ft.Colors.BLUE_900,
+                                    # Cover image if available
+                                    Container(
+                                        content=Image(
+                                            src=cover_image,
+                                            width=80,
+                                            height=80,
+                                            border_radius=ft.border_radius.all(8),
+                                            fit=ft.ImageFit.COVER,
+                                        ) if cover_image else None,
                                     ),
-                                    Container(height=3),
-                                    Text(
-                                        subtitle,
-                                        size=14,
-                                        weight=ft.FontWeight.W400,
-                                        color=ft.Colors.BLUE_GREY_700,
-                                        visible=bool(subtitle),
-                                    ),
-                                    Container(height=5),
-                                    
-                                    # Preview of content
-                                    Text(
-                                        content[:150] + ("..." if len(content) > 150 else ""),
-                                        size=14,
-                                        color=ft.Colors.BLUE_GREY_800,
-                                        max_lines=3,
-                                        overflow=ft.TextOverflow.ELLIPSIS,
-                                    ),
-                                    Container(height=10),
-                                    
+                                ],
+                                alignment=MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                        ),
+                        
+                        # Subtitle if available
+                        Text(
+                            subtitle,
+                            size=14,
+                            color="#455A64",  # BLUE_GREY_700
+                            weight="w500",
+                        ) if subtitle else Container(height=0),
+                        
+                        # Newsletter content preview
+                        Text(
+                            content[:150] + "..." if len(content) > 150 else content,
+                            size=14,
+                        ),
+                        
+                        # Footer with categories, author info, and read button
+                        Container(
+                            content=Row(
+                                [
                                     # Categories
-                                    category_row if categories else Container(height=0),
-                                    Container(height=10),
-                                    
-                                    # Author and read more button
+                                    category_row,
+                                    # Author and read button
                                     Row(
                                         [
                                             Text(
                                                 f"By {author_name}",
                                                 size=12,
-                                                color=ft.Colors.BLUE_GREY_600,
-                                                italic=True,
+                                                color="#78909C",  # BLUE_GREY_400
                                             ),
-                                            ft.ElevatedButton(
-                                                "Read More",
-                                                style=ButtonStyle(
-                                                    color={"": ft.Colors.WHITE},
-                                                    bgcolor={"": ft.Colors.BLUE_700},
-                                                    padding={"": 10},
-                                                ),
-                                                height=32,
-                                                on_click=lambda e, id=newsletter.get("id"): self.open_newsletter(id),
+                                            ElevatedButton(
+                                                text="Read",
+                                                on_click=lambda e, id=newsletter.get("id", ""): self.view_newsletter_detail(id),
                                             ),
                                         ],
-                                        alignment=MainAxisAlignment.SPACE_BETWEEN,
+                                        spacing=10,
                                     ),
                                 ],
+                                alignment=MainAxisAlignment.SPACE_BETWEEN,
+                                vertical_alignment=CrossAxisAlignment.CENTER,
                             ),
-                            padding=ft.padding.all(15),
+                            margin=ft.margin.only(top=10),
                         ),
                     ],
-                    spacing=0,
+                    spacing=10,
                 ),
+                padding=15,
             ),
             elevation=2,
-            margin=ft.margin.only(bottom=15),
+            margin=ft.margin.only(bottom=5),
         )
     
-    def open_newsletter(self, newsletter_id):
-        """Open a specific newsletter"""
-        if newsletter_id:
-            self.app.page.go(f"/newsletter/{newsletter_id}")
+    async def load_newsletters(self, filter_featured=False, filter_recent=False, filter_archived=False):
+        """Load newsletters from API with filtering options"""
+        try:
+            # Show loading indicator
+            self.newsletters_column.controls = [self.loading]
+            if self.page is not None:
+                await self.page.update_async()
+            
+            # Get newsletters from API
+            newsletters, error = await self.api_client.get_newsletters()
+            
+            # Clear the column
+            self.newsletters_column.controls.clear()
+            
+            if error:
+                # Show error message
+                self.newsletters_column.controls.append(
+                    Container(
+                        content=Text(
+                            f"Error loading newsletters: {error}",
+                            color="#EF5350",  # RED_400
+                        ),
+                        margin=ft.margin.only(top=20),
+                    )
+                )
+            elif not newsletters or len(newsletters) == 0:
+                # Show empty state
+                self.newsletters_column.controls.append(self.empty_state)
+            else:
+                # Apply filters
+                filtered_newsletters = newsletters
+                
+                # Additional filtering based on parameters
+                if filter_featured:
+                    filtered_newsletters = [n for n in filtered_newsletters if n.get("featured", False)]
+                if filter_recent:
+                    # Sort by date and take most recent
+                    from datetime import datetime
+                    filtered_newsletters.sort(
+                        key=lambda x: datetime.fromisoformat(x.get("publishedAt", "").replace('Z', '+00:00')) 
+                        if x.get("publishedAt") else datetime.min,
+                        reverse=True
+                    )
+                    filtered_newsletters = filtered_newsletters[:5]  # Take top 5 recent
+                if filter_archived:
+                    filtered_newsletters = [n for n in filtered_newsletters if n.get("archived", False)]
+                
+                # Create cards for each newsletter
+                for newsletter in filtered_newsletters:
+                    self.newsletters_column.controls.append(
+                        self.create_newsletter_card(newsletter)
+                    )
+            
+            # Update the UI
+            if self.page is not None:
+                await self.page.update_async()
+                
+        except Exception as e:
+            print(f"Error loading newsletters: {str(e)}")
+            if self.page is not None:
+                self.page.snack_bar = ft.SnackBar(
+                    content=Text(f"Error loading newsletters: {str(e)}"),
+                    bgcolor="#EF5350",  # RED_400
+                )
+                self.page.snack_bar.open = True
+                await self.page.update_async()
+    
+    def view_newsletter_detail(self, newsletter_id):
+        """Navigate to newsletter detail page"""
+        self.app.page.go(f"/newsletter/{newsletter_id}")
 
 
 class NewsletterDetailView(Container):
@@ -345,57 +384,47 @@ class NewsletterDetailView(Container):
         self.api_client = ApiClient(self.auth_service)
         self.newsletter_id = newsletter_id
         self.expand = True
-        self.padding = padding.only(left=20, right=20, top=20, bottom=80)
+        self.padding = padding.only(left=20, right=20, top=20, bottom=20)
         
         # Data loading indicator
         self.loading = ProgressRing(width=24, height=24, stroke_width=2)
         
-        # Newsletter content container
-        self.content_column = Column(spacing=10)
+        # Newsletter content containers
+        self.header = Container()
+        self.content_area = Container()
         
-        # Initial loading message
-        self.content_column.controls.append(
-            Container(
-                content=Row(
-                    [
-                        self.loading,
-                        Text("Loading newsletter...", size=14),
-                    ],
-                    alignment=MainAxisAlignment.CENTER,
-                    spacing=10,
-                ),
-                alignment=ft.alignment.center,
-                margin=ft.margin.only(top=20),
-            )
-        )
-        
-        # Build the UI
+        # Build initial UI with loading state
         self.content = Column(
             [
                 # Back button
                 Row(
                     [
                         IconButton(
-                            icon=ft.Icons.ARROW_BACK,
-                            tooltip="Back to newsletters",
+                            icon="arrow_back",
                             on_click=self.go_back,
                         ),
+                        Text(
+                            "Back to Newsletters",
+                            size=16,
+                            color="#2196F3",  # BLUE
+                        ),
                     ],
+                    spacing=0,
+                    vertical_alignment=CrossAxisAlignment.CENTER,
                 ),
                 
-                # Newsletter content
-                self.content_column,
+                # Loading indicator
+                Container(
+                    content=self.loading,
+                    alignment=ft.alignment.center,
+                    expand=True,
+                ),
             ],
-            spacing=10,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=20,
+            expand=True,
         )
         
-        # Load newsletter on initialization
-        self.did_mount_async()
-    
-    def did_mount_async(self):
-        """Load data asynchronously when the view is mounted"""
-        # Create event loop if needed
+        # Load newsletter details
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -403,302 +432,232 @@ class NewsletterDetailView(Container):
             asyncio.set_event_loop(loop)
         loop.create_task(self.load_newsletter())
     
+    def go_back(self, e=None):
+        """Navigate back to newsletters list"""
+        self.app.page.go("/newsletters")
+    
     async def load_newsletter(self):
-        """Load newsletter details from the API"""
-        # Fetch newsletter
-        newsletter, error = await self.api_client.get_newsletter_detail(self.newsletter_id)
-        
-        # Clear loading indicator
-        self.content_column.controls.clear()
-        
-        if newsletter:
-            title = newsletter.get("title", "Untitled")
-            subtitle = newsletter.get("subtitle", "")
-            content = newsletter.get("content", "")
-            published_at = newsletter.get("publishedAt", "")
-            created_by = newsletter.get("createdBy", {})
-            categories = newsletter.get("categories", [])
-            cover_image = newsletter.get("coverImage", "")
-            events = newsletter.get("events", [])
+        """Load newsletter details from API"""
+        try:
+            # Get newsletter from API
+            newsletter, error = await self.api_client.get_newsletter_by_id(self.newsletter_id)
             
-            # Format date if available
-            date_text = ""
-            if published_at:
-                try:
-                    from datetime import datetime
-                    date_obj = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
-                    date_text = date_obj.strftime("%B %d, %Y")
-                except Exception:
-                    date_text = published_at
-            
-            # Author information
-            author_name = f"{created_by.get('firstName', '')} {created_by.get('lastName', '')}".strip()
-            if not author_name:
-                author_name = created_by.get('email', 'Unknown')
-            
-            # Add newsletter header
-            self.content_column.controls.extend([
-                # Cover image
-                Image(
-                    src=cover_image,
-                    fit=ft.ImageFit.COVER,
-                    width=400,
-                    height=200,
-                    border_radius=ft.border_radius.all(8),
-                ) if cover_image else Container(height=0),
-                
-                # Title and metadata
-                Container(height=10),
-                Text(
-                    title,
-                    size=24,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.BLUE_900,
-                ),
-                Container(height=5),
-                Text(
-                    subtitle,
-                    size=18,
-                    weight=ft.FontWeight.W400,
-                    color=ft.Colors.BLUE_GREY_700,
-                    visible=bool(subtitle),
-                ),
-                Container(height=10),
-                Row(
+            if error:
+                # Show error message
+                self.content = Column(
                     [
+                        # Back button
                         Row(
                             [
-                                Icon(
-                                    name=ft.Icons.CALENDAR_TODAY,
-                                    size=16,
-                                    color=ft.Colors.BLUE_GREY_600,
+                                IconButton(
+                                    icon="arrow_back",
+                                    on_click=self.go_back,
                                 ),
                                 Text(
-                                    date_text,
-                                    size=14,
-                                    color=ft.Colors.BLUE_GREY_600,
+                                    "Back to Newsletters",
+                                    size=16,
+                                    color="#2196F3",  # BLUE
                                 ),
                             ],
-                            spacing=5,
+                            spacing=0,
+                            vertical_alignment=CrossAxisAlignment.CENTER,
                         ),
-                        Row(
-                            [
-                                Icon(
-                                    name=ft.Icons.PERSON,
-                                    size=16,
-                                    color=ft.Colors.BLUE_GREY_600,
-                                ),
-                                Text(
-                                    author_name,
-                                    size=14,
-                                    color=ft.Colors.BLUE_GREY_600,
-                                ),
-                            ],
-                            spacing=5,
+                        
+                        # Error message
+                        Container(
+                            content=Text(
+                                f"Error loading newsletter: {error}",
+                                color="#EF5350",  # RED_400
+                                size=16,
+                            ),
+                            margin=ft.margin.only(top=20),
+                            alignment=ft.alignment.center,
                         ),
                     ],
-                    alignment=MainAxisAlignment.SPACE_BETWEEN,
-                ),
+                    spacing=20,
+                    expand=True,
+                )
+            elif not newsletter:
+                # Newsletter not found
+                self.content = Column(
+                    [
+                        # Back button
+                        Row(
+                            [
+                                IconButton(
+                                    icon="arrow_back",
+                                    on_click=self.go_back,
+                                ),
+                                Text(
+                                    "Back to Newsletters",
+                                    size=16,
+                                    color="#2196F3",  # BLUE
+                                ),
+                            ],
+                            spacing=0,
+                            vertical_alignment=CrossAxisAlignment.CENTER,
+                        ),
+                        
+                        # Not found message
+                        Container(
+                            content=Text(
+                                "Newsletter not found",
+                                color="#78909C",  # BLUE_GREY_400
+                                size=16,
+                            ),
+                            margin=ft.margin.only(top=20),
+                            alignment=ft.alignment.center,
+                        ),
+                    ],
+                    spacing=20,
+                    expand=True,
+                )
+            else:
+                # Extract newsletter data
+                title = newsletter.get("title", "Untitled")
+                subtitle = newsletter.get("subtitle", "")
+                content = newsletter.get("content", "")
+                published_at = newsletter.get("publishedAt", "")
+                created_by = newsletter.get("createdBy", {})
+                categories = newsletter.get("categories", [])
+                cover_image = newsletter.get("coverImage", "")
                 
-                # Categories
-                Container(height=10),
-                Row(
+                # Format date
+                date_text = ""
+                if published_at:
+                    try:
+                        from datetime import datetime
+                        date_obj = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+                        date_text = date_obj.strftime("%B %d, %Y")
+                    except Exception:
+                        date_text = published_at
+                
+                # Author information
+                author_name = f"{created_by.get('first_name', '')} {created_by.get('last_name', '')}".strip()
+                if not author_name:
+                    author_name = created_by.get('email', 'Unknown')
+                
+                # Category tags
+                category_row = Row(
                     controls=[
                         Container(
                             content=Text(
                                 category.get("name", ""),
                                 size=12,
-                                color=ft.Colors.WHITE,
+                                color="#FFFFFF",  # WHITE
                             ),
-                            bgcolor=ft.Colors.BLUE_400,
+                            bgcolor="#42A5F5",  # BLUE_400
                             border_radius=ft.border_radius.all(4),
                             padding=ft.padding.symmetric(horizontal=8, vertical=4),
-                            margin=ft.margin.only(right=5),
+                            margin=ft.margin.only(right=5, bottom=5),
                         )
-                        for category in categories
+                        for category in categories  # Show all categories
                     ],
                     wrap=True,
                     spacing=0,
-                ) if categories else Container(height=0),
-                
-                # Divider
-                Container(height=15),
-                Divider(height=1, color=ft.Colors.BLUE_GREY_200),
-                Container(height=15),
-                
-                # Content
-                self.format_content(content),
-            ])
-            
-            # Add related events if any
-            if events:
-                self.content_column.controls.extend([
-                    Container(height=20),
-                    Text(
-                        "Related Events",
-                        size=18,
-                        weight=ft.FontWeight.W500,
-                        color=ft.Colors.BLUE_700,
-                    ),
-                    Container(height=10),
-                ])
-                
-                for event in events:
-                    self.content_column.controls.append(self.create_event_card(event))
-        else:
-            self.content_column.controls.append(
-                Container(
-                    content=Column(
-                        [
-                            Icon(
-                                name=ft.Icons.ERROR_OUTLINE,
-                                size=40,
-                                color=ft.Colors.RED_400,
-                            ),
-                            Container(height=10),
-                            Text(
-                                error or "Newsletter not found",
-                                size=16,
-                                text_align=ft.TextAlign.CENTER,
-                                color=ft.Colors.RED_400,
-                            ),
-                            Container(height=20),
-                            ElevatedButton(
-                                "Back to Newsletters",
-                                on_click=self.go_back,
-                            ),
-                        ],
-                        horizontal_alignment=CrossAxisAlignment.CENTER,
-                    ),
-                    alignment=ft.alignment.center,
-                    margin=ft.margin.only(top=40),
                 )
-            )
-        
-        self.update()
-    
-    def format_content(self, content):
-        """Format the newsletter content for display"""
-        # In a real app, you might parse markdown or HTML here
-        # For now, we'll just split by newlines and create paragraphs
-        paragraphs = content.split("\n\n")
-        
-        content_column = Column(spacing=15)
-        
-        for paragraph in paragraphs:
-            if paragraph.strip():
-                content_column.controls.append(
-                    Text(
-                        paragraph.strip(),
-                        size=16,
-                        color=ft.Colors.BLUE_GREY_900,
-                    )
-                )
-        
-        return content_column
-    
-    def create_event_card(self, event):
-        """Create a card for a related event"""
-        title = event.get("title", "Untitled")
-        location = event.get("location", "")
-        start_date = event.get("startDate", "")
-        end_date = event.get("endDate", "")
-        
-        # Format date if available
-        date_text = ""
-        time_text = ""
-        if start_date:
-            try:
-                from datetime import datetime
-                start_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                date_text = start_obj.strftime("%B %d, %Y")
-                time_text = start_obj.strftime("%I:%M %p")
                 
-                if end_date:
-                    end_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                    if start_obj.date() != end_obj.date():
-                        date_text += f" - {end_obj.strftime('%B %d, %Y')}"
-                    time_text += f" - {end_obj.strftime('%I:%M %p')}"
-            except Exception:
-                date_text = start_date
-        
-        return Card(
-            content=Container(
-                content=Row(
+                # Build newsletter detail view
+                self.content = Column(
                     [
-                        Container(
-                            content=Icon(
-                                name=ft.Icons.EVENT,
-                                color=ft.Colors.BLUE_700,
-                                size=24,
-                            ),
-                            margin=ft.margin.only(right=10),
-                        ),
-                        Column(
+                        # Back button
+                        Row(
                             [
-                                Text(
-                                    title,
-                                    size=16,
-                                    weight=ft.FontWeight.W500,
-                                    color=ft.Colors.BLUE_900,
+                                IconButton(
+                                    icon="arrow_back",
+                                    on_click=self.go_back,
                                 ),
-                                Row(
-                                    [
-                                        Icon(
-                                            name=ft.Icons.CALENDAR_TODAY,
-                                            size=14,
-                                            color=ft.Colors.BLUE_GREY_600,
-                                        ),
-                                        Text(
-                                            date_text,
-                                            size=14,
-                                            color=ft.Colors.BLUE_GREY_600,
-                                        ),
-                                    ],
-                                    spacing=5,
-                                ) if date_text else Container(height=0),
-                                Row(
-                                    [
-                                        Icon(
-                                            name=ft.Icons.ACCESS_TIME,
-                                            size=14,
-                                            color=ft.Colors.BLUE_GREY_600,
-                                        ),
-                                        Text(
-                                            time_text,
-                                            size=14,
-                                            color=ft.Colors.BLUE_GREY_600,
-                                        ),
-                                    ],
-                                    spacing=5,
-                                ) if time_text else Container(height=0),
-                                Row(
-                                    [
-                                        Icon(
-                                            name=ft.Icons.LOCATION_ON,
-                                            size=14,
-                                            color=ft.Colors.BLUE_GREY_600,
-                                        ),
-                                        Text(
-                                            location,
-                                            size=14,
-                                            color=ft.Colors.BLUE_GREY_600,
-                                        ),
-                                    ],
-                                    spacing=5,
-                                ) if location else Container(height=0),
+                                Text(
+                                    "Back to Newsletters",
+                                    size=16,
+                                    color="#2196F3",  # BLUE
+                                ),
                             ],
-                            spacing=5,
+                            spacing=0,
+                            vertical_alignment=CrossAxisAlignment.CENTER,
+                        ),
+                        
+                        # Newsletter header
+                        Container(
+                            content=Column(
+                                [
+                                    # Title
+                                    Text(
+                                        title,
+                                        size=24,
+                                        weight="bold",
+                                    ),
+                                    
+                                    # Subtitle if available
+                                    Text(
+                                        subtitle,
+                                        size=18,
+                                        color="#455A64",  # BLUE_GREY_700
+                                    ) if subtitle else Container(height=0),
+                                    
+                                    # Date and author
+                                    Row(
+                                        [
+                                            Text(
+                                                date_text,
+                                                size=14,
+                                                color="#78909C",  # BLUE_GREY_400
+                                            ),
+                                            Text(
+                                                f"By {author_name}",
+                                                size=14,
+                                                color="#78909C",  # BLUE_GREY_400
+                                            ),
+                                        ],
+                                        spacing=20,
+                                    ) if date_text or author_name else Container(height=0),
+                                    
+                                    # Categories
+                                    category_row if categories else Container(height=0),
+                                    
+                                    # Cover image if available
+                                    Image(
+                                        src=cover_image,
+                                        width=800,
+                                        height=300,
+                                        fit=ft.ImageFit.COVER,
+                                        border_radius=ft.border_radius.all(8),
+                                    ) if cover_image else Container(height=0),
+                                ],
+                                spacing=10,
+                            ),
+                            margin=ft.margin.only(bottom=20),
+                        ),
+                        
+                        # Content divider
+                        Divider(height=1, color="#ECEFF1"),  # BLUE_GREY_100
+                        
+                        # Newsletter content with scrolling
+                        Container(
+                            content=Text(
+                                content,
+                                size=16,
+                                selectable=True,
+                            ),
+                            margin=ft.margin.only(top=20),
                             expand=True,
                         ),
                     ],
-                ),
-                padding=ft.padding.all(15),
-            ),
-            elevation=1,
-            margin=ft.margin.only(bottom=10),
-        )
-    
-    def go_back(self, e=None):
-        """Navigate back to the newsletters list"""
-        self.app.page.go("/newsletters")
+                    spacing=10,
+                    scroll=ft.ScrollMode.AUTO,
+                    expand=True,
+                )
+            
+            # Update the UI
+            if self.page is not None:
+                await self.page.update_async()
+                
+        except Exception as e:
+            print(f"Error loading newsletter: {str(e)}")
+            if self.page is not None:
+                self.page.snack_bar = ft.SnackBar(
+                    content=Text(f"Error loading newsletter: {str(e)}"),
+                    bgcolor="#EF5350",  # RED_400
+                )
+                self.page.snack_bar.open = True
+                await self.page.update_async()
