@@ -1,0 +1,805 @@
+import flet as ft
+from flet import (
+    Column, Container, Card, Row, Text, 
+    IconButton, Icon, MainAxisAlignment, 
+    CrossAxisAlignment, ProgressRing, padding, 
+    BoxShadow, alignment, ScrollMode,
+    TextField, ElevatedButton, ButtonStyle,
+    margin, CircleAvatar, Divider, Tabs, Tab
+)
+import asyncio
+import datetime
+from api.graphql_client import ApiClient
+
+
+class DashboardView(Container):
+    def __init__(self, app_instance):
+        super().__init__()
+        self.app = app_instance
+        self.auth_service = app_instance.auth_service
+        self.api_client = ApiClient(self.auth_service)
+        self.expand = True
+        # Reduced left padding to accommodate the sidebar
+        self.padding = padding.only(left=10, right=20, top=20, bottom=0)
+        
+        # User info from auth service
+        self.user = self.auth_service.get_user() or {}
+        
+        # Data loading indicator
+        self.loading = ProgressRing(width=20, height=20, stroke_width=2)
+        
+        # Create feed containers with social media style
+        self.feed_items = Column(spacing=15, scroll=ScrollMode.AUTO, expand=True)
+        
+        # Status update field (like posting to a social feed)
+        self.status_field = TextField(
+            hint_text="Share an update or announcement...",
+            border_radius=10,
+            min_lines=2,
+            max_lines=4,
+            filled=True,
+            bgcolor=ft.Colors.BLUE_50,
+        )
+        
+        # Build the initial UI with social media layout
+        self.content = Column(
+            [
+                # Header with user info and search
+                Container(
+                    content=Row(
+                        [
+                            # User greeting and daycare title
+                            Column(
+                                [
+                                    Text(
+                                        f"Welcome, {self.user.get('firstName', 'User')}!",
+                                        size=24,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=ft.Colors.BLUE_900,
+                                    ),
+                                    Text(
+                                        "Discoverers Daycare Community",
+                                        size=16,
+                                        color=ft.Colors.BLUE_GREY_700,
+                                    ),
+                                ],
+                            ),
+                            # Profile avatar (right side)
+                            Container(
+                                content=CircleAvatar(
+                                    # Use initials for avatar if no profile picture
+                                    content=Text(self.user.get("firstName", "U")[0].upper()),
+                                    color=ft.Colors.WHITE,
+                                    bgcolor=ft.Colors.BLUE_ACCENT,
+                                ),
+                                margin=margin.only(left=10),
+                            ),
+                        ],
+                        alignment=MainAxisAlignment.SPACE_BETWEEN,
+                    ),
+                    margin=margin.only(bottom=15),
+                ),
+                
+                # Status update section - like posting to social media
+                Container(
+                    content=Column(
+                        [
+                            self.status_field,
+                            Row(
+                                [
+                                    ElevatedButton(
+                                        "Post Update",
+                                        icon=ft.Icons.SEND,
+                                        style=ButtonStyle(
+                                            shape={
+                                                "":ft.RoundedRectangleBorder(radius=8),
+                                            },
+                                        ),
+                                        on_click=self.post_update,
+                                    ),
+                                ],
+                                alignment=MainAxisAlignment.END,
+                            ),
+                        ],
+                    ),
+                    bgcolor=ft.Colors.WHITE,
+                    border_radius=8,
+                    padding=padding.all(15),
+                    shadow=BoxShadow(
+                        spread_radius=1,
+                        blur_radius=10,
+                        color=ft.Colors.BLACK12,
+                    ),
+                    margin=margin.only(bottom=20),
+                ),
+                
+                # Feed tabs - allow switching between different content types
+                Tabs(
+                    selected_index=0,
+                    animation_duration=300,
+                    tabs=[
+                        Tab(
+                            text="All Updates",
+                            icon=ft.Icons.DYNAMIC_FEED,
+                        ),
+                        Tab(
+                            text="Newsletters",
+                            icon=ft.Icons.NEWSPAPER,
+                        ),
+                        Tab(
+                            text="Announcements",
+                            icon=ft.Icons.ANNOUNCEMENT,
+                        ),
+                        Tab(
+                            text="Events",
+                            icon=ft.Icons.EVENT,
+                        ),
+                    ],
+                    on_change=self.tab_changed,
+                ),
+                
+                Divider(height=1, color=ft.Colors.BLUE_GREY_100),
+                
+                # Main feed area
+                Container(
+                    content=self.feed_items,
+                    expand=True,
+                    margin=margin.only(top=10),
+                ),
+            ],
+            spacing=0,
+            expand=True,
+        )
+        
+        # Load data on initialization
+        self.did_mount_async()
+    
+    def did_mount_async(self):
+        """Load data asynchronously when the view is mounted"""
+        # Display loading indicator
+        self.feed_items.controls = [self.loading]
+        self.update()
+        
+        async def load_data():
+            try:
+                # Load all data types for the feed
+                newsletters, news_error = await self.api_client.get_newsletters()
+                announcements, announcement_error = await self.api_client.get_announcements()
+                events, events_error = await self.api_client.get_upcoming_events()
+                
+                # Combine all items into a single feed with timestamps
+                feed_items = []
+                
+                # Add newsletters to feed with preview content
+                if newsletters:
+                    for item in newsletters:
+                        item['type'] = 'newsletter'
+                        item['timestamp'] = item.get('publishedAt', '')
+                        # Add a preview of the content
+                        content = item.get('content', '')
+                        if content and len(content) > 150:
+                            item['preview'] = content[:150] + '...'
+                        else:
+                            item['preview'] = content
+                        feed_items.append(item)
+                
+                # Add announcements to feed
+                if announcements:
+                    for item in announcements:
+                        item['type'] = 'announcement'
+                        item['timestamp'] = item.get('createdAt', '')
+                        feed_items.append(item)
+                
+                # Add events to feed
+                if events:
+                    for item in events:
+                        item['type'] = 'event'
+                        item['timestamp'] = item.get('date', '')
+                        feed_items.append(item)
+                
+                # Sort all items by timestamp (newest first)
+                feed_items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+                
+                if feed_items:
+                    # Create feed items for the dashboard
+                    self.feed_items.controls = [
+                        self.create_feed_item(item) for item in feed_items
+                    ]
+                else:
+                    # No items to display
+                    self.feed_items.controls = [
+                        Container(
+                            content=Column(
+                                [
+                                    Icon(
+                                        name=ft.Icons.INFO_OUTLINE,
+                                        size=40,
+                                        color=ft.Colors.BLUE_GREY_300,
+                                    ),
+                                    Text(
+                                        "No updates available",
+                                        size=16,
+                                        color=ft.Colors.BLUE_GREY_500,
+                                        text_align=ft.TextAlign.CENTER,
+                                    ),
+                                ],
+                                alignment=CrossAxisAlignment.CENTER,
+                                horizontal_alignment=CrossAxisAlignment.CENTER,
+                            ),
+                            alignment=alignment.center,
+                            padding=padding.all(30),
+                        )
+                    ]
+                
+                self.update()
+            except Exception as e:
+                print(f"Error loading dashboard data: {e}")
+                # Show error state
+                self.feed_items.controls = [
+                    Container(
+                        content=Text(f"Error loading data: {str(e)}"),
+
+# Load data on initialization
+self.did_mount_async()
+
+def did_mount_async(self):
+    """Load data asynchronously when the view is mounted"""
+    # Display loading indicator
+    self.feed_items.controls = [self.loading]
+    self.update()
+    
+    async def load_data():
+        try:
+            # Load all data types for the feed
+            newsletters, news_error = await self.api_client.get_newsletters()
+            announcements, announcement_error = await self.api_client.get_announcements()
+            events, events_error = await self.api_client.get_upcoming_events()
+        tab_index = e.control.selected_index
+        
+        # Display loading indicator
+        self.feed_items.controls = [self.loading]
+        self.update()
+        
+        async def filter_feed():
+            try:
+                # Show loading indicator
+                self.feed_items.controls = [self.loading]
+                self.update()
+            
+            # Get all data types
+            newsletters, _ = await self.api_client.get_newsletters()
+            announcements, _ = await self.api_client.get_announcements()
+            events, _ = await self.api_client.get_upcoming_events()
+            
+            # Filter based on tab
+            if tab_index == 0:  # All Updates
+                feed_items = []
+                
+                # Add all content types
+                if newsletters:
+                    for item in newsletters:
+                        item['type'] = 'newsletter'
+                        item['timestamp'] = item.get('publishedAt', '')
+                        feed_items.append(item)
+                        
+                if announcements:
+                    for item in announcements:
+                        item['type'] = 'announcement'
+                        item['timestamp'] = item.get('createdAt', '')
+                        feed_items.append(item)
+                        
+                if events:
+                    for item in events:
+                        item['type'] = 'event'
+                        item['timestamp'] = item.get('date', '')
+                        feed_items.append(item)
+                
+            elif tab_index == 1:  # Newsletters only
+                feed_items = []
+                if newsletters:
+                    for item in newsletters:
+                        item['type'] = 'newsletter'
+                        item['timestamp'] = item.get('publishedAt', '')
+                        feed_items.append(item)
+                        
+            elif tab_index == 2:  # Announcements only
+                feed_items = []
+                if announcements:
+                    for item in announcements:
+                        item['type'] = 'announcement'
+                        item['timestamp'] = item.get('createdAt', '')
+                        feed_items.append(item)
+                        
+            elif tab_index == 3:  # Events only
+                feed_items = []
+                if events:
+                    for item in events:
+                        item['type'] = 'event'
+                        item['timestamp'] = item.get('date', '')
+                        feed_items.append(item)
+            
+            # Sort items by timestamp (newest first)
+            feed_items.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            
+            if feed_items:
+                # Create feed items for the dashboard
+                self.feed_items.controls = [
+                    self.create_feed_item(item) for item in feed_items
+                ]
+            else:
+                # No items to display
+                self.feed_items.controls = [
+                    Container(
+                        content=Column(
+                            [
+                                Icon(
+                                    name=ft.Icons.INFO_OUTLINE,
+                                    size=40,
+                                    color=ft.Colors.BLUE_GREY_300,
+                                ),
+                                Text(
+                                    "No items found",
+                                    size=16,
+                                    color=ft.Colors.BLUE_GREY_500,
+                                    text_align=ft.TextAlign.CENTER,
+                                ),
+                            ],
+                            alignment=CrossAxisAlignment.CENTER,
+                            horizontal_alignment=CrossAxisAlignment.CENTER,
+                        ),
+                        alignment=alignment.center,
+                        padding=padding.all(30),
+                    )
+                ]
+                
+            self.update()
+        
+        # Run the filtering coroutine
+        loop.create_task(filter_feed())
+        
+    def post_update(self, e):
+        """Handle posting a status update"""
+        # This would normally connect to a backend API
+        # For now, we'll just show a notification
+        if self.status_field.value:
+            self.app.page.snack_bar = ft.SnackBar(
+                content=Text("Status updates will be available in a future version"),
+                action="OK",
+            )
+            self.app.page.snack_bar.open = True
+            self.status_field.value = ""
+            self.update()
+            self.app.page.update()
+            
+    def create_feed_item(self, item):
+        """Create a social media style card for a feed item"""
+        item_type = item.get('type', '')
+        title = item.get('title', 'Untitled')
+        timestamp = item.get('timestamp', '')
+        author_name = item.get('author', {}).get('name', 'Admin')
+        preview_content = item.get('preview', '')
+        
+        # Format the timestamp
+        date_text = "Today"
+        if timestamp:
+            try:
+                # Convert to readable format
+                date_obj = datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                date_text = date_obj.strftime("%b %d, %Y")
+            except Exception:
+                date_text = timestamp
+        
+        # Create appropriate icons and badges based on content type
+        if item_type == 'newsletter':
+            icon = ft.Icons.NEWSPAPER
+            badge_text = "Newsletter"
+            badge_color = ft.Colors.BLUE_700
+            def newsletter_click_handler(e):
+                self.view_newsletter_detail(item.get('id'))
+            on_click_handler = newsletter_click_handler
+            
+        elif item_type == 'announcement':
+            icon = ft.Icons.ANNOUNCEMENT
+            badge_text = "Announcement"
+            badge_color = ft.Colors.ORANGE_700
+            priority = item.get('priority', 'MEDIUM')
+            if priority == 'URGENT':
+                badge_color = ft.Colors.RED_700
+            def announcement_click_handler(e):
+                self.view_all_announcements()
+            on_click_handler = announcement_click_handler
+            
+        elif item_type == 'event':
+            icon = ft.Icons.EVENT
+            badge_text = "Event"
+            badge_color = ft.Colors.GREEN_700
+            def event_click_handler(e):
+                self.view_all_events()
+            on_click_handler = event_click_handler
+            
+        else:
+            icon = ft.Icons.ARTICLE
+            # No specific color needed for default case
+            badge_text = "Update"
+            badge_color = ft.Colors.BLUE_GREY_700
+            def default_click_handler(e):
+                pass
+            on_click_handler = default_click_handler
+        
+        # Create a card with social media styling
+        return Container(
+            content=Card(
+                content=Container(
+                    content=Column(
+                        [
+                            # Header with author info and badge
+                            Row(
+                                [
+                                    # Author avatar and name
+                                    Row(
+                                        [
+                                            CircleAvatar(
+                                                content=Text(author_name[0].upper()),
+                                                bgcolor=ft.Colors.BLUE_GREY_300,
+                                                color=ft.Colors.WHITE,
+                                                radius=16,
+                                            ),
+                                            Column(
+                                                [
+                                                    Text(
+                                                        author_name,
+                                                        size=14,
+                                                        weight=ft.FontWeight.BOLD,
+                                                    ),
+                                                    Text(
+                                                        date_text,
+                                                        size=12,
+                                                        color=ft.Colors.BLUE_GREY_500,
+                                                    ),
+                                                ],
+                                                spacing=0,
+                                                horizontal_alignment=CrossAxisAlignment.START,
+                                            ),
+                                        ],
+                                        spacing=10,
+                                    ),
+                                    # Type badge
+                                    Container(
+                                        content=Row(
+                                            [
+                                                Icon(
+                                                    name=icon,
+                                                    color=ft.Colors.WHITE,
+                                                    size=12,
+                                                ),
+                                                Text(
+                                                    badge_text,
+                                                    color=ft.Colors.WHITE,
+                                                    size=12,
+                                                    weight=ft.FontWeight.W_500,
+                                                ),
+                                            ],
+                                            spacing=4,
+                                        ),
+                                        bgcolor=badge_color,
+                                        border_radius=12,
+                                        padding=padding.symmetric(horizontal=8, vertical=4),
+                                    ),
+                                ],
+                                alignment=MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            
+                            # Content
+                            Container(
+                                content=Column(
+                                    [
+                                        Text(
+                                            title,
+                                            size=18,
+                                            weight=ft.FontWeight.W_500,
+                                            color=ft.Colors.BLUE_900,
+                                        ),
+                                        Container(height=5),
+                                        Text(
+                                            content[:150] + ("..." if len(content) > 150 else ""),
+                                            size=14,
+                                            color=ft.Colors.BLUE_GREY_800,
+                                        ),
+                                    ],
+                                ),
+                                margin=margin.symmetric(vertical=10),
+                            ),
+                            
+                            # Actions row (like, comment, share)
+                            Row(
+                                [
+                                    Row(
+                                        [
+                                            IconButton(
+                                                icon=ft.Icons.THUMB_UP_OUTLINED,
+                                                tooltip="Like",
+                                                icon_color=ft.Colors.BLUE_GREY_500,
+                                            ),
+                                            Text("0", size=14, color=ft.Colors.BLUE_GREY_500),
+                                        ],
+                                    ),
+                                    Row(
+                                        [
+                                            IconButton(
+                                                icon=ft.Icons.COMMENT_OUTLINED,
+                                                tooltip="Comment",
+                                                icon_color=ft.Colors.BLUE_GREY_500,
+                                            ),
+                                            Text("0", size=14, color=ft.Colors.BLUE_GREY_500),
+                                        ],
+                                    ),
+                                    IconButton(
+                                        icon=ft.Icons.READ_MORE,
+                                        tooltip="View details",
+                                        icon_color=ft.Colors.BLUE_700,
+                                        on_click=on_click_handler,
+                                    ),
+                                ],
+                                alignment=MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                        ],
+                    ),
+                    padding=padding.all(15),
+                ),
+                elevation=2,
+            ),
+            margin=margin.only(bottom=15),
+        )
+    
+    def create_newsletter_card(self, newsletter):
+        """Create a card for a newsletter"""
+        title = newsletter.get("title", "Untitled")
+        subtitle = newsletter.get("subtitle", "")
+        published_at = newsletter.get("publishedAt", "")
+        
+        # Format date if available
+        date_text = ""
+        if published_at:
+            try:
+                from datetime import datetime
+                date_obj = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+                date_text = date_obj.strftime("%B %d, %Y")
+            except Exception:
+                date_text = published_at
+        
+        return Card(
+            content=Container(
+                content=Column(
+                    [
+                        Row(
+                            [
+                                Icon(
+                                    name=ft.Icons.ARTICLE_OUTLINED,
+                                    color=ft.Colors.BLUE_700,
+                                ),
+                                Text(
+                                    date_text,
+                                    size=12,
+                                    color=ft.Colors.BLUE_GREY_500,
+                                ),
+                            ],
+                            alignment=MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        Container(height=5),
+                        Text(
+                            title,
+                            size=16,
+                            weight=ft.FontWeight.W_400,
+                            color=ft.Colors.BLUE_900,
+                        ),
+                        Container(height=2),
+                        Text(
+                            subtitle or "Click to read more...",
+                            size=14,
+                            color=ft.Colors.BLUE_GREY_700,
+                            max_lines=2,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                        ),
+                    ],
+                ),
+                padding=ft.padding.all(15),
+                on_click=lambda e: self.open_newsletter(newsletter.get("id")),
+            ),
+            elevation=1,
+            margin=ft.margin.only(bottom=10),
+        )
+    
+    def create_announcement_card(self, announcement):
+        """Create a card for an announcement"""
+        title = announcement.get("title", "Untitled")
+        content = announcement.get("content", "")
+        priority = announcement.get("priority", "MEDIUM")
+        created_at = announcement.get("createdAt", "")
+        
+        # Determine color based on priority
+        priority_colors = {
+            "LOW": ft.Colors.GREEN,
+            "MEDIUM": ft.Colors.BLUE,
+            "HIGH": ft.Colors.ORANGE,
+            "URGENT": ft.Colors.RED,
+        }
+        priority_color = priority_colors.get(priority, ft.Colors.BLUE)
+        
+        # Format date if available
+        date_text = ""
+        if created_at:
+            try:
+                from datetime import datetime
+                date_obj = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                date_text = date_obj.strftime("%B %d, %Y")
+            except Exception:
+                date_text = created_at
+        
+        return Card(
+            content=Container(
+                content=Column(
+                    [
+                        Row(
+                            [
+                                Container(
+                                    content=Text(
+                                        priority,
+                                        size=12,
+                                        color=ft.Colors.WHITE,
+                                    ),
+                                    padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                                    border_radius=ft.border_radius.all(4),
+                                    bgcolor=priority_color,
+                                ),
+                                Text(
+                                    date_text,
+                                    size=12,
+                                    color=ft.Colors.BLUE_GREY_500,
+                                ),
+                            ],
+                            alignment=MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        Container(height=5),
+                        Text(
+                            title,
+                            size=16,
+                            weight=ft.FontWeight.W_400,
+                            color=ft.Colors.BLUE_900,
+                        ),
+                        Container(height=2),
+                        Text(
+                            content,
+                            size=14,
+                            color=ft.Colors.BLUE_GREY_700,
+                            max_lines=2,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                        ),
+                    ],
+                ),
+                padding=ft.padding.all(15),
+            ),
+            elevation=1,
+            margin=ft.margin.only(bottom=10),
+        )
+    
+    def create_event_card(self, event):
+        """Create a card for an event"""
+        title = event.get("title", "Untitled")
+        description = event.get("description", "")
+        location = event.get("location", "")
+        start_date = event.get("startDate", "")
+        end_date = event.get("endDate", "")
+        
+        # Format date if available
+        date_text = ""
+        if start_date:
+            try:
+                from datetime import datetime
+                start_obj = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                date_text = start_obj.strftime("%B %d, %Y")
+                
+                if end_date:
+                    end_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    if start_obj.date() != end_obj.date():
+                        date_text += f" - {end_obj.strftime('%B %d, %Y')}"
+                    
+                time_text = f"{start_obj.strftime('%I:%M %p')}"
+                if end_date:
+                    end_obj = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    time_text += f" - {end_obj.strftime('%I:%M %p')}"
+            except Exception:
+                date_text = start_date
+                time_text = ""
+        else:
+            date_text = "Date TBD"
+            time_text = ""
+        
+        return Card(
+            content=Container(
+                content=Column(
+                    [
+                        Row(
+                            [
+                                Icon(
+                                    name=ft.Icons.EVENT,
+                                    color=ft.Colors.BLUE_700,
+                                ),
+                                Column(
+                                    [
+                                        Text(
+                                            date_text,
+                                            size=12,
+                                            color=ft.Colors.BLUE_GREY_700,
+                                            weight=ft.FontWeight.W_400,
+                                        ),
+                                        Text(
+                                            time_text,
+                                            size=12,
+                                            color=ft.Colors.BLUE_GREY_500,
+                                        ),
+                                    ],
+                                    spacing=0,
+                                    horizontal_alignment=CrossAxisAlignment.END,
+                                ),
+                            ],
+                            alignment=MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        Container(height=5),
+                        Text(
+                            title,
+                            size=16,
+                            weight=ft.FontWeight.W_400,
+                            color=ft.Colors.BLUE_900,
+                        ),
+                        Container(height=2),
+                        Row(
+                            [
+                                Icon(
+                                    name=ft.Icons.LOCATION_ON,
+                                    color=ft.Colors.BLUE_GREY_500,
+                                    size=16,
+                                ),
+                                Text(
+                                    location,
+                                    size=14,
+                                    color=ft.Colors.BLUE_GREY_700,
+                                ),
+                            ],
+                            spacing=5,
+                            visible=bool(location),
+                        ),
+                        Text(
+                            description,
+                            size=14,
+                            color=ft.Colors.BLUE_GREY_700,
+                            max_lines=2,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                        ),
+                    ],
+                ),
+                padding=ft.padding.all(15),
+            ),
+            elevation=1,
+            margin=ft.margin.only(bottom=10),
+        )
+    
+    def view_all_newsletters(self, e=None):
+        """Navigate to newsletters page"""
+        self.app.page.go("/newsletters")
+    
+    def view_newsletter_detail(self, newsletter_id):
+        """Navigate to newsletter detail page"""
+        self.app.page.go(f"/newsletter/{newsletter_id}")
+        
+    def view_all_announcements(self, e=None):
+        """Navigate to announcements page"""
+        self.app.page.go("/announcements")
+        
+    def view_all_events(self, e=None):
+        """Navigate to events page"""
+        self.app.page.go("/events")
+    
+    def open_newsletter(self, newsletter_id):
+        """Open a specific newsletter"""
+        if newsletter_id:
+            self.app.page.go(f"/newsletter/{newsletter_id}")
